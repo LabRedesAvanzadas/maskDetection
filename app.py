@@ -1,48 +1,84 @@
-from flask import Flask, Response
+################# Loading libraries and frameworks #################
+from flask import Flask, render_template, Response
 import cv2
+import os
+import json
+
+#####################################################################
 
 app = Flask(__name__)
-video = cv2.VideoCapture(0)
-# face_cascade = cv2.CascadeClassifier()
-# face_cascade.load(cv2.samples.findFile("static/haarcascade_frontalface_alt.xml"))
-# initialize the HOG descriptor/person detector
-hog = cv2.HOGDescriptor()
-hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
-@app.route('/')
-def index():
-    return "Default Message"
+# ################################## Haar Detector path ##################################
+FACE_DETECTOR_PATH = "./models/haarcascade_frontalface_alt_tree.xml"
+# #########################################################################################
+#
+# ############### Haar Classifier creation ###############
+face_class = cv2.CascadeClassifier(FACE_DETECTOR_PATH)
+# ########################################################
+
+# hog = cv2.HOGDescriptor()
+# hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+n_faces = 0
+
+#################### Get video ####################
+## Video path. By default, we get the webcam ##
+video_path = 'rtsp://200.126.12.8:8554/lab'
+###################################################
+camera = cv2.VideoCapture(video_path)
 
 
-def gen(video):
+###################################################
+
+# Function which allows us to detect the face #
+def detect_face():
     while True:
-        success, image = video.read()
-        frame_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        frame_gray = cv2.equalizeHist(frame_gray)
+        ######### Get every frame#######
+        success, frame = camera.read()
+        ################################
+        # Stop if an error occurs #
+        if not success:
+            break
+        #########################
+        ######## Conversion into grey level ########
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        ##############################################
+        ###################################### Face detection ###################################
+        faces = face_class.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(15, 15))
+        #########################################################################################
 
-        faces = hog.detectMultiScale(frame_gray, winStride=(8,8) )
-
-        for (x, y, w, h) in faces:
-            center = (x + w // 2, y + h // 2)
-            cv2.putText(image, "X: " + str(center[0]) + " Y: " + str(center[1]), (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1,
-                        (255, 0, 0), 3)
-            image = cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-            faceROI = frame_gray[y:y + h, x:x + w]
-        ret, jpeg = cv2.imencode('.jpg', image)
-
-        frame = jpeg.tobytes()
-
+        ####### Boundaries boxes creation for every detected face #######
+        for (fx, fy, fw, fh) in faces:
+            cv2.rectangle(frame, (fx, fy), (fx + fw, fy + fh), (255, 255, 0), 2)
+            roi_gray = gray[fy:fy + fh, fx:fx + fw]
+            roi_color = frame[fy:fy + fh, fx:fx + fw]
+        ####################################################################
+        ################# Convert the result into an image the browser can ddisplay #################
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame = buffer.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        #######################################################################################
 
 
+############################################
+
+######################## Routing to the face detection function ########################
 @app.route('/video_feed')
 def video_feed():
-    global video
-    return Response(gen(video),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(detect_face(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
+##########################################################################################
+
+################# Main page #################
+@app.route('/')
+def index():
+    """Main page."""
+    return render_template('index.html')
+
+
+#############################################
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=2204, threaded=True)
+
