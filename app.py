@@ -23,7 +23,8 @@ n_faces = 0
 
 #################### Get video ####################
 ## Video path. By default, we get the webcam ##
-video_path = 'rtsp://200.126.12.8:8554/lab'
+""" video_path = 'rtsp://200.126.12.8:8554/lab' """
+video_path = 0
 ###################################################
 camera = cv2.VideoCapture(video_path)
 
